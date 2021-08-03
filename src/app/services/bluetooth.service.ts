@@ -1,14 +1,18 @@
-import { Injectable, ɵAPP_ID_RANDOM_PROVIDER } from '@angular/core';
-import { AlertController, PopoverController } from '@ionic/angular';
-import { exponentialBackoff } from '../util/time';
-import { LoggerService } from './logger.service';
+import { Injectable } from '@angular/core';
+import { BluetoothLE } from '@ionic-native/bluetooth-le/ngx';
+import { Platform } from '@ionic/angular';
+import { Subject } from 'rxjs';
+import { filter, map, take } from 'rxjs/operators';
 import Comm from 'src/app/interfaces/comm';
-import { Observable, Subject } from 'rxjs';
-import { randomId } from '../util/id';
 import { NoDeviceConnected } from '../exceptions/no-device';
-import { filter, map, mapTo, take } from 'rxjs/operators';
 import { NotConnected } from '../exceptions/not-connected';
-import { Meta } from '@angular/platform-browser';
+import { UnexpectedState } from '../exceptions/unexpected-state';
+import { BLEAdapter, SendOptionsForAdapter } from '../interfaces/ble-adapter';
+import { decode } from '../util/ble-encode-decode';
+import { exponentialBackoff } from '../util/time';
+import { BLENativeAdapter } from './bluetooth-adapters/ble-native';
+import { BLEWebAdapter } from './bluetooth-adapters/ble-web';
+import { LoggerService } from './logger.service';
 
 export interface SendOptions<P, M extends Comm.Meta> {
   spec: Comm.Operation<P, M>;
@@ -33,8 +37,6 @@ export class BluetoothService {
   static targetService = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
   static targetCharacteristic = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
 
-  device: null | BluetoothDevice = null;
-
   private readonly historySubject$ = new Subject<
     HistoryEntry<unknown, unknown>
   >();
@@ -42,155 +44,128 @@ export class BluetoothService {
   // eslint-disable-next-line @typescript-eslint/member-ordering
   readonly history$ = this.historySubject$.asObservable();
 
-  private readonly encoder = new TextEncoder();
-  private readonly decoder = new TextDecoder();
-  private hasNotificationListener = false;
+  private impl: BLEAdapter;
+  private doesNotify: boolean;
 
-  constructor(private readonly logger: LoggerService) {}
+  constructor(
+    private readonly logger: LoggerService,
+    public bluetoothle: BluetoothLE,
+    public plt: Platform
+  ) {
+    this.setupBLE();
+  }
+
+  async setupBLE() {
+    const readySource = await this.plt.ready();
+    this.logger.log('Platform ready from:', readySource);
+
+    switch (readySource) {
+      case 'dom': {
+        return this.setupWebBLE();
+      }
+      default:
+        return this.setupNativeBLE();
+    }
+  }
+
+  async setupWebBLE() {
+    this.impl = new BLEWebAdapter(this.logger);
+    this.impl.onConnected(this.onConnect.bind(this));
+    this.impl.onDisconnected(this.onDisconnected.bind(this));
+  }
+
+  async setupNativeBLE() {
+    const ble = await this.bluetoothle.initialize().toPromise();
+    this.logger.log('ble status:', ble.status);
+
+    this.impl = new BLENativeAdapter(this.logger);
+    this.impl.onConnected(this.onConnect.bind(this));
+    this.impl.onDisconnected(this.onDisconnected.bind(this));
+  }
+
+  get isReady() {
+    return !!this.impl;
+  }
 
   get connected(): boolean {
-    return this.device?.gatt?.connected || false;
+    try {
+      return this.impl.connected;
+    } catch (e) {
+      return false;
+    }
   }
 
   get receivesNotifications(): boolean {
-    return this.hasNotificationListener;
+    return this.doesNotify;
   }
 
-  async getService() {
-    return this.device?.gatt?.getPrimaryService(BluetoothService.targetService);
-  }
+  async getTargetCharcteristic() {
+    const service = await this.impl.getService(BluetoothService.targetService);
 
-  async getCharacteristic() {
-    const service = await this.getService();
-
-    return service?.getCharacteristic(BluetoothService.targetCharacteristic);
+    return service.getCharacteristic(BluetoothService.targetCharacteristic);
   }
 
   async send<R, P = unknown, M extends Comm.Meta = any>(
     options: SendOptions<P, M>
-  ): Promise<Comm.Envelope<R, M> | []> {
-    const { spec: payloadSpec, expectResponse } = options;
+  ): Promise<Comm.Envelope<R, M>> {
+    const to = await this.getTargetCharcteristic();
 
-    if (!this.device?.gatt?.connected) {
-      throw new NotConnected();
+    const sentPayload = await this.impl.send({
+      ...options,
+      to,
+    });
+
+    this.pushHistory(sentPayload, true);
+
+    if (options.expectResponse) {
+      return this.readNextValue(options.spec.operation) as Promise<
+        Comm.Envelope<R, M>
+      >;
     }
 
-    const start = performance.now();
-    const char = await this.getCharacteristic();
-    let r;
-
-    const payload: Comm.Envelope<P, M> = [
-      payloadSpec.operation,
-      new payloadSpec(),
-      payloadSpec.meta,
-    ];
-
-    // not sure why we should differentiate between these, but the spec
-    // say it can "improve" the protocol communication.
-    // whatever that means, we just follow the spec here.
-    // NOTE: `writeValue` is deprecated
-    // @see https://webbluetoothcg.github.io/web-bluetooth/#dom-bluetoothremotegattcharacteristic-writevalue
-    if (!expectResponse) {
-      await char?.writeValueWithoutResponse(this.encode(payload));
-    } else {
-      await char?.writeValueWithResponse(this.encode(payload));
-    }
-
-    this.pushHistory(payload, true);
-
-    if (expectResponse) {
-      r = await this.readNextValue(payloadSpec.operation);
-    }
-
-    const tookUs = Math.trunc(performance.now() - start);
-    this.logger.log(`operation ${payloadSpec.operation} took ${tookUs}ms`);
-
-    return r || [];
-  }
-
-  encode(v: any) {
-    return this.encoder.encode(JSON.stringify(v));
-  }
-
-  decode(buff: BufferSource) {
-    const strDecoded = this.decoder.decode(buff);
-    try {
-      return JSON.parse(strDecoded);
-    } catch (e) {
-      return strDecoded;
-    }
+    return [];
   }
 
   async pairNew() {
-    try {
-      this.logger.log('Requesting connection to BimmerLED Device...');
-      this.device = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [BluetoothService.targetService],
-        // filters: [
-        //   {
-        //     services: [BluetoothService.targetService],
-        //   },
-        // ],
-      });
-
-      this.device.addEventListener(
-        'gattserverdisconnected',
-        this.onDisconnected.bind(this)
-      );
-
-      this.tryReconnect();
-    } catch (error) {
-      this.logger.log('Argh! ' + error);
-    }
+    return this.impl.pairNew(BluetoothService.targetService);
   }
 
   async tryReconnect() {
-    if (!this.device) {
-      throw new NoDeviceConnected();
-    }
-
-    exponentialBackoff(
-      3,
-      2,
-      async () => {
-        this.logger.log('Connecting to Bluetooth Device... ');
-        await this.device?.gatt?.connect();
-      },
-      async () => {
-        this.logger.log('Bluetooth Device connected.');
-        const char = await this.getCharacteristic();
-
-        try {
-          char?.startNotifications();
-
-          char?.addEventListener(
-            'characteristicvaluechanged',
-            this.handleNotify.bind(this)
-          );
-          this.hasNotificationListener = true;
-          this.logger.log('Listening on notifications...');
-        } catch (e) {
-          this.logger.warn('Unable to listen on notifications', e);
-        }
-      },
-      () => {
-        this.logger.log('Failed to reconnect.');
-      }
-    );
+    this.logger.log('Reconnecting...');
+    await this.impl.connect(BluetoothService.targetService);
   }
 
   async handleNotify(event: any) {
     const newValue = event.target?.value as DataView;
 
-    const decodedValue = this.decode(newValue?.buffer);
+    const decodedValue = decode(newValue?.buffer);
     this.pushHistory(decodedValue, false);
   }
 
-  private onDisconnected() {
+  private async onConnect() {
+    this.logger.log('Bluetooth Device connected.');
+
+    this.listenForNotifications();
+  }
+
+  private async listenForNotifications() {
+    const char = await this.getTargetCharcteristic();
+
+    if (!char) {
+      throw new UnexpectedState();
+    }
+
+    char.startNotifications();
+    char.onNotify(this.handleNotify.bind(this));
+
+    this.doesNotify = true;
+    this.logger.log('Listening on notifications...');
+  }
+
+  private async onDisconnected() {
     this.logger.log('Bluetooth Device disconnected');
 
-    this.hasNotificationListener = false;
+    this.doesNotify = false;
     this.tryReconnect();
   }
 
@@ -206,23 +181,6 @@ export class BluetoothService {
       sent: sentFromMe ? true : undefined,
       value,
     });
-  }
-
-  private async readValue() {
-    const char = await this.getCharacteristic();
-    const newValue = await char?.readValue();
-
-    if (newValue?.buffer) {
-      const decodedValue = this.decode(newValue?.buffer);
-      this.pushHistory(decodedValue, false);
-      return decodedValue;
-    } else {
-      this.logger.warn(
-        'Received notification, however the new value could not be read.'
-      );
-    }
-
-    return null;
   }
 
   private async readNextValue(targetOperationId: number) {

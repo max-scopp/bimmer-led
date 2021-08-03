@@ -32,7 +32,7 @@ namespace Comm {
     new (): P;
   }
 
-  export type Envelope<P, M = undefined> = [number, P, M | undefined];
+  export type Envelope<P, M = undefined> = [number, P, M | undefined] | [];
 
   export enum KnownOperation {
     ping = 0,

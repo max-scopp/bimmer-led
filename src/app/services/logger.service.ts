@@ -60,6 +60,6 @@ export class LoggerService {
         break;
     }
 
-    values.forEach((logValue) => log(`[${levelName}]: ${String(logValue)}`));
+    log(`[${levelName}]: ${String(values.join(' '))}`);
   }
 }

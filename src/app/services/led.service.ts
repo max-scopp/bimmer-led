@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
-import { Meta } from '@angular/platform-browser';
 import { AlertController, ToastController } from '@ionic/angular';
-import { filter, map } from 'rxjs/operators';
+import { filter } from 'rxjs/operators';
 import Comm from '../interfaces/comm';
 import { BluetoothService, HistoryEntry } from './bluetooth.service';
 
@@ -24,9 +23,10 @@ export class LedService {
         filter((n) => Comm.Meta.of(n.value[2]).isMessage())
       )
       .subscribe((envelope: HistoryEntry<string, Comm.Meta>) => {
+        // eslint-disable-next-line @typescript-eslint/dot-notation
+        const message = envelope.value.length ? [1]['o'] : 'No message';
         this.handleControllerUserMessage(
-          // eslint-disable-next-line @typescript-eslint/dot-notation
-          envelope.value[1]['o'],
+          message,
           Comm.Meta.of(envelope.value[2])
         );
       });
@@ -61,7 +61,7 @@ export class LedService {
     prompt.present();
 
     try {
-      if (!this.bluetooth.device?.gatt?.connected) {
+      if (!this.bluetooth.connected) {
         await this.bluetooth.tryReconnect();
       }
       const start = Date.now();
