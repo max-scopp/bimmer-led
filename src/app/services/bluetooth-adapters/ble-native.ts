@@ -1,4 +1,4 @@
-import { BluetoothLE } from '@ionic-native/bluetooth-le/ngx';
+import { BluetoothLE, DeviceInfo } from '@ionic-native/bluetooth-le/ngx';
 import { ActionSheetController, ModalController } from '@ionic/angular';
 import {
   BLEAdapter,
@@ -11,9 +11,17 @@ import { BleDevicesComponent } from 'src/app/native/ble-devices/ble-devices.comp
 import { LoggerService } from '../logger.service';
 
 export class BLENativeAdapter implements BLEAdapter {
-  connected: boolean;
+  connected = false;
 
-  device: any;
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  listeners = {
+    // eslint-disable-next-line @typescript-eslint/ban-types
+    connect: [] as Function[],
+    // eslint-disable-next-line @typescript-eslint/ban-types
+    disconnect: [] as Function[],
+  };
+
+  device: DeviceInfo | null = null;
 
   constructor(
     private readonly logger: LoggerService,
@@ -21,12 +29,24 @@ export class BLENativeAdapter implements BLEAdapter {
     private readonly modalController: ModalController
   ) {}
 
-  onConnected(connectedFn: () => any): RemoveListenerFunction {
-    throw new Error('Method not implemented.');
+  onConnected(connectedFn: () => any) {
+    this.listeners.connect.push(connectedFn);
+
+    return () => {
+      this.listeners.connect = this.listeners.connect.filter(
+        (fn) => fn !== connectedFn
+      );
+    };
   }
 
-  onDisconnected(disconnectFn: () => any): RemoveListenerFunction {
-    throw new Error('Method not implemented.');
+  onDisconnected(disconnectFn: () => any) {
+    this.listeners.disconnect.push(disconnectFn);
+
+    return () => {
+      this.listeners.disconnect = this.listeners.disconnect.filter(
+        (fn) => fn !== disconnectFn
+      );
+    };
   }
 
   async connect(targetService: string) {
@@ -41,11 +61,19 @@ export class BLENativeAdapter implements BLEAdapter {
   }
 
   async disconnect() {
-    throw new Error('Method not implemented.');
+    if (this.device?.address) {
+      this.ble.disconnect({
+        address: this.device.address,
+      });
+    }
   }
 
-  async pairNew() {
-    throw new Error('Method not implemented.');
+  async pairNew(targetService: string) {
+    await this.disconnect();
+
+    this.device = null;
+
+    return this.connect(targetService);
   }
 
   send<R, P = unknown, M extends Comm.Meta = any>(

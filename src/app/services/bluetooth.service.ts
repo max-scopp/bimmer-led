@@ -6,7 +6,9 @@ import { filter, map, take } from 'rxjs/operators';
 import Comm from 'src/app/interfaces/comm';
 import { UnexpectedState } from '../exceptions/unexpected-state';
 import { BLEAdapter } from '../interfaces/ble-adapter';
+import { displayAlert } from '../util/alert';
 import { decode } from '../util/ble-encode-decode';
+import { displayError } from '../util/error';
 import { BLENativeAdapter } from './bluetooth-adapters/ble-native';
 import { BLEWebAdapter } from './bluetooth-adapters/ble-web';
 import { LoggerService } from './logger.service';
@@ -68,19 +70,33 @@ export class BluetoothService {
 
   async setupWebBLE() {
     this.impl = new BLEWebAdapter(this.logger);
+
     this.impl.onConnected(this.onConnect.bind(this));
     this.impl.onDisconnected(this.onDisconnected.bind(this));
   }
 
   async setupNativeBLE() {
-    const ble = await this.bluetoothle.initialize().toPromise();
-    this.logger.log('ble status:', ble.status);
+    if (this.plt.is('android')) {
+      await this.bluetoothle.enable();
+    }
+
+    const ble = this.bluetoothle.initialize({
+      request: true,
+    });
+
+    const { status = null } = await ble.pipe(take(1)).toPromise();
+
+    if (status !== 'enabled') {
+      displayError(new Error('Bluetooth could not be enabled successfully.'));
+      return;
+    }
 
     this.impl = new BLENativeAdapter(
       this.logger,
       this.bluetoothle,
       this.modalController
     );
+
     this.impl.onConnected(this.onConnect.bind(this));
     this.impl.onDisconnected(this.onDisconnected.bind(this));
   }
