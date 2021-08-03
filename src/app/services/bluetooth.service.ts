@@ -1,15 +1,12 @@
 import { Injectable } from '@angular/core';
 import { BluetoothLE } from '@ionic-native/bluetooth-le/ngx';
-import { Platform } from '@ionic/angular';
+import { ModalController, Platform } from '@ionic/angular';
 import { Subject } from 'rxjs';
 import { filter, map, take } from 'rxjs/operators';
 import Comm from 'src/app/interfaces/comm';
-import { NoDeviceConnected } from '../exceptions/no-device';
-import { NotConnected } from '../exceptions/not-connected';
 import { UnexpectedState } from '../exceptions/unexpected-state';
-import { BLEAdapter, SendOptionsForAdapter } from '../interfaces/ble-adapter';
+import { BLEAdapter } from '../interfaces/ble-adapter';
 import { decode } from '../util/ble-encode-decode';
-import { exponentialBackoff } from '../util/time';
 import { BLENativeAdapter } from './bluetooth-adapters/ble-native';
 import { BLEWebAdapter } from './bluetooth-adapters/ble-web';
 import { LoggerService } from './logger.service';
@@ -49,6 +46,7 @@ export class BluetoothService {
 
   constructor(
     private readonly logger: LoggerService,
+    private readonly modalController: ModalController,
     public bluetoothle: BluetoothLE,
     public plt: Platform
   ) {
@@ -78,7 +76,11 @@ export class BluetoothService {
     const ble = await this.bluetoothle.initialize().toPromise();
     this.logger.log('ble status:', ble.status);
 
-    this.impl = new BLENativeAdapter(this.logger);
+    this.impl = new BLENativeAdapter(
+      this.logger,
+      this.bluetoothle,
+      this.modalController
+    );
     this.impl.onConnected(this.onConnect.bind(this));
     this.impl.onDisconnected(this.onDisconnected.bind(this));
   }
