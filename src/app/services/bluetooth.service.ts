@@ -87,7 +87,7 @@ export class BluetoothService {
 
     const { status = null } = await ble.pipe(take(1)).toPromise();
 
-    debugger
+    debugger;
 
     if (status !== 'enabled') {
       displayError(new Error('Bluetooth could not be enabled successfully.'));

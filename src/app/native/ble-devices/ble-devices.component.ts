@@ -1,5 +1,5 @@
 import { BluetoothService } from './../../services/bluetooth.service';
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input, NgZone, OnInit } from '@angular/core';
 import { BLE } from '@ionic-native/ble/ngx';
 import {
   BluetoothCallbackType,
@@ -13,6 +13,7 @@ import {
 import { Observable } from 'rxjs';
 import { filter, tap } from 'rxjs/operators';
 import { displayError } from 'src/app/util/error';
+import { LoggerService } from 'src/app/services/logger.service';
 
 @Component({
   selector: 'app-ble-devices',
@@ -25,66 +26,47 @@ export class BleDevicesComponent implements OnInit {
 
   devices$: Observable<ScanStatus>;
 
-  possibleDevices: DeviceInfo[] | null = null;
+  devices: any[];
 
   isInitializing = false;
   isScanning = false;
+  toastCtrl: any;
+  statusMessage: any;
 
-  constructor(private readonly ble: BLE) { }
+  @Input()
+  modal: any;
+
+  constructor(
+    private readonly logger: LoggerService,
+    private readonly ble: BLE,
+    private ngZone: NgZone
+  ) {}
 
   async ngOnInit() {
     this.scan();
   }
-
-  async scan() {
-    try {
-      await this.stopScan();
-    } catch (e) { }
-
-    this.isInitializing = true;
-
-    try {
-
-      const scanList = this.ble.startScan([]);
-
-      scanList.subscribe(c => {
-        this.possibleDevices?.push(c);
-        debugger
-        const connected = this.ble.connect(c.id);
-        connected.subscribe(conn => {
-          console.log(conn);
-          debugger
-        })
-      });
-
-      // this.devices$ = this.ble.startScan({});
-
-      // this.isInitializing = false;
-
-      // await this.ble.isScanning;
-      // this.devices$.subscribe((d) => {
-      //   switch (d.status) {
-      //     case 'scanStarted': {
-      //       this.possibleDevices = [];
-      //       this.possibleDevices.push(...devices);
-      //       return;
-      //     }
-      //     case 'scanResult':
-      //       return this.possibleDevices?.push(d);
-      //     case 'scanStopped':
-      //       this.possibleDevices = null;
-      //       this.isScanning = false;
-      //       return;
-      //   }
-      // });
-    } catch (e) {
-      displayError(e);
-    } finally {
-      this.isInitializing = false;
-    }
+  dismissModal() {
+    this.modal.dismiss();
   }
 
   async stopScan() {
     await this.ble.stopScan();
+    this.isScanning = false;
+  }
+
+  scan() {
+    this.logger.log('Scanning for Bluetooth LE Devices');
+
+    this.devices = [];
+
+    const scanning$ = this.ble.startScan([]);
+
+    this.isScanning = true;
+
+    scanning$.subscribe((device) => {
+      this.ngZone.run(() => {
+        this.devices.push(device);
+      });
+    }, displayError);
   }
 }

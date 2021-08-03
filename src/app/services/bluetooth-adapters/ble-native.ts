@@ -29,7 +29,7 @@ export class BLENativeAdapter implements BLEAdapter {
     private readonly bluetoothLe: BluetoothLE,
     private readonly ble: BLE,
     private readonly modalController: ModalController
-  ) { }
+  ) {}
 
   onConnected(connectedFn: () => any) {
     this.listeners.connect.push(connectedFn);
@@ -53,6 +53,7 @@ export class BLENativeAdapter implements BLEAdapter {
 
   async connect(targetService: string) {
     const modal = await this.modalController.create({
+      swipeToClose: true,
       component: BleDevicesComponent,
       componentProps: {
         targetService,

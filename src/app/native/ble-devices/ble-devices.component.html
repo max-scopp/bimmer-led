@@ -1,15 +1,25 @@
-<ion-button *ngIf="isScanning" color="primary" (click)="stopScan()">
-  Stop scan
-</ion-button>
-<ion-button *ngIf="!isScanning" color="primary" (click)="scan()">
-  Start scanning
-</ion-button>
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Connect to Controller</ion-title>
+    <ion-buttons slot="start">
+      <ion-button *ngIf="isScanning" color="primary" (click)="stopScan()">
+        Stop scan
+      </ion-button>
+      <ion-button *ngIf="!isScanning" color="primary" (click)="scan()">
+        Start scanning
+      </ion-button>
+    </ion-buttons>
+    <ion-buttons slot="end">
+      <ion-spinner *ngIf="isScanning"></ion-spinner>
+      <ion-button (click)="dismissModal()">Close</ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
 
-<ion-spinner *ngIf="isInitializing"></ion-spinner>
-
-<ion-list *ngIf="isScanning && !isInitializing">
-  <ion-item *ngFor="let device of possibleDevices">
-    <ion-icon name="bluetooth" *ngIf="device.status === 'connected'"></ion-icon>
-    <ion-label>{{ device | json }}</ion-label>
+<ion-list>
+  <ion-item ion-item *ngFor="let device of devices">
+    <h2>{{ device.name || "Unnamed" }}</h2>
+    <p>{{ device.id }}</p>
+    <p>RSSI: {{ device.rssi }}</p>
   </ion-item>
 </ion-list>
