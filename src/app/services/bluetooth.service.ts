@@ -76,12 +76,15 @@ export class BluetoothService {
   }
 
   async setupNativeBLE() {
-    if (this.plt.is('android')) {
-      await this.bluetoothle.enable();
-    }
+    // await this.bluetoothle.enable();
 
     const ble = this.bluetoothle.initialize({
       request: true,
+    });
+
+    ble.subscribe((_ble) => {
+      console.log(_ble);
+      debugger
     });
 
     const { status = null } = await ble.pipe(take(1)).toPromise();
