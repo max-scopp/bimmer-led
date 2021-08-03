@@ -1,5 +1,5 @@
 import { Injectable, ɵAPP_ID_RANDOM_PROVIDER } from '@angular/core';
-import { AlertController } from '@ionic/angular';
+import { AlertController, PopoverController } from '@ionic/angular';
 import { exponentialBackoff } from '../util/time';
 import { LoggerService } from './logger.service';
 import Comm from 'src/app/interfaces/comm';
@@ -7,9 +7,16 @@ import { Observable, Subject } from 'rxjs';
 import { randomId } from '../util/id';
 import { NoDeviceConnected } from '../exceptions/no-device';
 import { filter, map, mapTo, take } from 'rxjs/operators';
+import { NotConnected } from '../exceptions/not-connected';
+import { Meta } from '@angular/platform-browser';
 
-export interface HistoryEntry {
-  value: Comm.Any;
+export interface SendOptions<P, M extends Comm.Meta> {
+  spec: Comm.Operation<P, M>;
+  expectResponse: boolean;
+}
+
+export interface HistoryEntry<P, M> {
+  value: Comm.Envelope<P, M>;
   at: string;
   valid?: boolean;
 
@@ -28,7 +35,9 @@ export class BluetoothService {
 
   device: null | BluetoothDevice = null;
 
-  private readonly historySubject$ = new Subject<HistoryEntry>();
+  private readonly historySubject$ = new Subject<
+    HistoryEntry<unknown, unknown>
+  >();
 
   // eslint-disable-next-line @typescript-eslint/member-ordering
   readonly history$ = this.historySubject$.asObservable();
@@ -57,32 +66,46 @@ export class BluetoothService {
     return service?.getCharacteristic(BluetoothService.targetCharacteristic);
   }
 
-  async send<R = unknown, P = unknown>(
-    payloadSpec: Comm.Operation<P>,
-    expectResponse = false
-  ): Promise<R | void> {
+  async send<R, P = unknown, M extends Comm.Meta = any>(
+    options: SendOptions<P, M>
+  ): Promise<Comm.Envelope<R, M> | []> {
+    const { spec: payloadSpec, expectResponse } = options;
+
+    if (!this.device?.gatt?.connected) {
+      throw new NotConnected();
+    }
+
+    const start = performance.now();
     const char = await this.getCharacteristic();
     let r;
 
-    const payload: any[] = [payloadSpec.operation, new payloadSpec()];
+    const payload: Comm.Envelope<P, M> = [
+      payloadSpec.operation,
+      new payloadSpec(),
+      payloadSpec.meta,
+    ];
 
-    if (payloadSpec.meta) {
-      payload.push(payloadSpec.meta);
-    }
-
+    // not sure why we should differentiate between these, but the spec
+    // say it can "improve" the protocol communication.
+    // whatever that means, we just follow the spec here.
+    // NOTE: `writeValue` is deprecated
+    // @see https://webbluetoothcg.github.io/web-bluetooth/#dom-bluetoothremotegattcharacteristic-writevalue
     if (!expectResponse) {
-      // NOTE: `writeValue` is deprecated
-      // @see https://webbluetoothcg.github.io/web-bluetooth/#dom-bluetoothremotegattcharacteristic-writevalue
       await char?.writeValueWithoutResponse(this.encode(payload));
     } else {
       await char?.writeValueWithResponse(this.encode(payload));
-
-      r = await this.readNextValue();
     }
 
     this.pushHistory(payload, true);
 
-    return r;
+    if (expectResponse) {
+      r = await this.readNextValue(payloadSpec.operation);
+    }
+
+    const tookUs = Math.trunc(performance.now() - start);
+    this.logger.log(`operation ${payloadSpec.operation} took ${tookUs}ms`);
+
+    return r || [];
   }
 
   encode(v: any) {
@@ -159,7 +182,7 @@ export class BluetoothService {
 
   async handleNotify(event: any) {
     const newValue = event.target?.value as DataView;
-    console.log({ newValue });
+
     const decodedValue = this.decode(newValue?.buffer);
     this.pushHistory(decodedValue, false);
   }
@@ -171,7 +194,10 @@ export class BluetoothService {
     this.tryReconnect();
   }
 
-  private pushHistory<V extends Comm.Any>(value: V, sentFromMe: boolean) {
+  private pushHistory<P, M, V extends Comm.Envelope<P, M>>(
+    value: V,
+    sentFromMe: boolean
+  ) {
     this.logger.debug(`${sentFromMe ? '>' : '<'} ${JSON.stringify(value)}`);
 
     this.historySubject$.next({
@@ -199,13 +225,14 @@ export class BluetoothService {
     return null;
   }
 
-  private async readNextValue() {
+  private async readNextValue(targetOperationId: number) {
     return this.history$
       .pipe(
         filter((n) => !n.sent),
+        filter((n) => (n.value as Array<Comm.Any>)[0] === targetOperationId),
         take(1),
         map((n) => n.value)
       )
-      .toPromise() as Promise<any>;
+      .toPromise();
   }
 }

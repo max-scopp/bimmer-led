@@ -18,7 +18,7 @@ export class Tab3Page {
   @ViewChild('log')
   scroller: ElementRef<any>;
 
-  commandHistory: HistoryEntry[] = [];
+  commandHistory: HistoryEntry<any, any>[] = [];
 
   constructor(
     readonly bluetoothService: BluetoothService,
@@ -29,7 +29,7 @@ export class Tab3Page {
     });
   }
 
-  trackByFn = (index: number, item: HistoryEntry) => item.at;
+  trackByFn = (index: number, item: HistoryEntry<any, any>) => item.at;
 
   itemHeightFn = () => 22;
 
