@@ -1,3 +1,5 @@
+import { BluetoothLE } from '@ionic-native/bluetooth-le/ngx';
+import { ActionSheetController, ModalController } from '@ionic/angular';
 import {
   BLEAdapter,
   BLEServiceAdapter,
@@ -5,22 +7,37 @@ import {
   SendOptionsForAdapter,
 } from 'src/app/interfaces/ble-adapter';
 import Comm from 'src/app/interfaces/comm';
+import { BleDevicesComponent } from 'src/app/native/ble-devices/ble-devices.component';
 import { LoggerService } from '../logger.service';
 
 export class BLENativeAdapter implements BLEAdapter {
   connected: boolean;
 
-  constructor(private readonly logger: LoggerService) {}
+  device: any;
+
+  constructor(
+    private readonly logger: LoggerService,
+    private readonly ble: BluetoothLE,
+    private readonly modalController: ModalController
+  ) {}
 
   onConnected(connectedFn: () => any): RemoveListenerFunction {
     throw new Error('Method not implemented.');
   }
+
   onDisconnected(disconnectFn: () => any): RemoveListenerFunction {
     throw new Error('Method not implemented.');
   }
 
   async connect(targetService: string) {
-    throw new Error('Method not implemented.');
+    const modal = await this.modalController.create({
+      component: BleDevicesComponent,
+      componentProps: {
+        targetService,
+      },
+    });
+
+    await modal.present();
   }
 
   async disconnect() {
