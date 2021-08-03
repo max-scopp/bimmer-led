@@ -1,4 +1,6 @@
+import { BluetoothService } from './../../services/bluetooth.service';
 import { Component, Input, OnInit } from '@angular/core';
+import { BLE } from '@ionic-native/ble/ngx';
 import {
   BluetoothCallbackType,
   BluetoothLE,
@@ -28,33 +30,32 @@ export class BleDevicesComponent implements OnInit {
   isInitializing = false;
   isScanning = false;
 
-  constructor(private readonly ble: BluetoothLE) {}
+  constructor(private readonly ble: BLE) { }
 
   async ngOnInit() {
-    this.isScanning = (await this.ble.isScanning())?.isScanning;
     this.scan();
   }
 
   async scan() {
     try {
       await this.stopScan();
-    } catch (e) {}
+    } catch (e) { }
 
     this.isInitializing = true;
 
     try {
-      const connected = (await this.ble.retrieveConnected()) as any as any[];
 
-      const appConnected = this.ble.connect(connected[0]);
-      appConnected.subscribe((c) => {
-        debugger;
+      const scanList = this.ble.startScan([]);
+
+      scanList.subscribe(c => {
+        this.possibleDevices?.push(c);
+        debugger
+        const connected = this.ble.connect(c.id);
+        connected.subscribe(conn => {
+          console.log(conn);
+          debugger
+        })
       });
-
-      const devices = await Promise.all(
-        connected.map((d) => this.ble.discover({ address: d.address }))
-      );
-
-      debugger;
 
       // this.devices$ = this.ble.startScan({});
 

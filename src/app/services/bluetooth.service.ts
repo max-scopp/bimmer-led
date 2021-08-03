@@ -11,6 +11,8 @@ import { decode } from '../util/ble-encode-decode';
 import { displayError } from '../util/error';
 import { BLENativeAdapter } from './bluetooth-adapters/ble-native';
 import { BLEWebAdapter } from './bluetooth-adapters/ble-web';
+
+import { BLE } from '@ionic-native/ble/ngx';
 import { LoggerService } from './logger.service';
 
 export interface SendOptions<P, M extends Comm.Meta> {
@@ -50,6 +52,7 @@ export class BluetoothService {
     private readonly logger: LoggerService,
     private readonly modalController: ModalController,
     public bluetoothle: BluetoothLE,
+    public readonly ble: BLE,
     public plt: Platform
   ) {
     this.setupBLE();
@@ -82,12 +85,9 @@ export class BluetoothService {
       request: true,
     });
 
-    ble.subscribe((_ble) => {
-      console.log(_ble);
-      debugger
-    });
-
     const { status = null } = await ble.pipe(take(1)).toPromise();
+
+    debugger
 
     if (status !== 'enabled') {
       displayError(new Error('Bluetooth could not be enabled successfully.'));
@@ -97,6 +97,7 @@ export class BluetoothService {
     this.impl = new BLENativeAdapter(
       this.logger,
       this.bluetoothle,
+      this.ble,
       this.modalController
     );
 

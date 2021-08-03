@@ -1,3 +1,4 @@
+import { BLE } from '@ionic-native/ble/ngx';
 import { BluetoothLE, DeviceInfo } from '@ionic-native/bluetooth-le/ngx';
 import { ActionSheetController, ModalController } from '@ionic/angular';
 import {
@@ -25,9 +26,10 @@ export class BLENativeAdapter implements BLEAdapter {
 
   constructor(
     private readonly logger: LoggerService,
-    private readonly ble: BluetoothLE,
+    private readonly bluetoothLe: BluetoothLE,
+    private readonly ble: BLE,
     private readonly modalController: ModalController
-  ) {}
+  ) { }
 
   onConnected(connectedFn: () => any) {
     this.listeners.connect.push(connectedFn);
@@ -62,7 +64,7 @@ export class BLENativeAdapter implements BLEAdapter {
 
   async disconnect() {
     if (this.device?.address) {
-      this.ble.disconnect({
+      this.bluetoothLe.disconnect({
         address: this.device.address,
       });
     }
