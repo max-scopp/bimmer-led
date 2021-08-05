@@ -16,8 +16,19 @@
       <ion-item>
         <ion-label>Status</ion-label>
 
-        <ion-text *ngIf="!bluetoothService.connected" slot="end" color="medium">
+        <ion-text
+          *ngIf="!(bluetoothService.connected || bluetoothService.connecting)"
+          slot="end"
+          color="medium"
+        >
           Disconnected
+        </ion-text>
+        <ion-text
+          *ngIf="bluetoothService.connecting"
+          slot="end"
+          color="warning"
+        >
+          Connecting...
         </ion-text>
         <ion-text *ngIf="bluetoothService.connected" slot="end" color="success">
           Connected

@@ -1,14 +1,16 @@
 import { BLE } from '@ionic-native/ble/ngx';
-import { NgModule } from '@angular/core';
+import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { RouteReuseStrategy } from '@angular/router';
-import { BluetoothLE } from '@ionic-native/bluetooth-le/ngx';
 
 import { IonicModule, IonicRouteStrategy } from '@ionic/angular';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { NativeModule } from './native/native.module';
+import { GlobalAppErrorHandler } from './error.handler';
+import { LoggerService } from './services/logger.service';
+import { BluetoothLE } from '@ionic-native/bluetooth-le/ngx';
 
 @NgModule({
   declarations: [AppComponent],
@@ -23,7 +25,8 @@ import { NativeModule } from './native/native.module';
     BluetoothLE,
     BLE,
     { provide: RouteReuseStrategy, useClass: IonicRouteStrategy },
+    { provide: ErrorHandler, useClass: GlobalAppErrorHandler },
   ],
   bootstrap: [AppComponent],
 })
-export class AppModule { }
+export class AppModule {}

@@ -5,9 +5,11 @@ import {
   ViewDidEnter,
   ViewWillEnter,
 } from '@ionic/angular';
+import { throttle } from 'throttle-debounce';
 import { UnexpectedEmptyResponse } from '../exceptions/unexpected-empty-response';
 import Comm from '../interfaces/comm';
 import { LedService } from '../services/led.service';
+import { LoggerService } from '../services/logger.service';
 import { nice } from '../util/try-nice';
 import { EffectsPopoverComponent } from './effects-popover/effects-popover.component';
 
@@ -20,7 +22,13 @@ export class Tab2Page implements ViewWillEnter {
   state: Comm.StateResponse | null = null;
   isRefreshing = false;
 
+  onBrightnessChange = throttle(80, async (event) => {
+    const response = await this.ledService.brightness(event.target.value);
+    this.loggerService.log('setBrightness took ', response.took);
+  });
+
   constructor(
+    private readonly loggerService: LoggerService,
     private readonly popoverController: PopoverController,
     private readonly ledService: LedService
   ) {}
@@ -62,10 +70,10 @@ export class Tab2Page implements ViewWillEnter {
     nice({
       try: async () => {
         this.isRefreshing = true;
-        const [, state] = await this.ledService.getState();
+        const response = await this.ledService.getState();
 
-        if (state) {
-          this.state = state;
+        if (response.data) {
+          this.state = response.data;
         } else {
           throw new UnexpectedEmptyResponse();
         }
@@ -83,9 +91,5 @@ export class Tab2Page implements ViewWillEnter {
     });
 
     popover.present();
-  }
-
-  onBrightnessChange(event) {
-    this.ledService.brightness(event.target.value);
   }
 }

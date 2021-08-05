@@ -1,3 +1,7 @@
 export class NoDeviceConnected extends Error {
-  message = 'No device is connected. Try pairing a new device.';
+  constructor(
+    readonly message = 'No device is connected. Try pairing a new device.'
+  ) {
+    super(message);
+  }
 }

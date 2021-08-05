@@ -22,10 +22,10 @@ export class EffectsPopoverComponent implements OnInit {
   async ngOnInit() {
     nice({
       try: async () => {
-        const [, response] = await this.ledService.getEffects();
+        const response = await this.ledService.getEffects();
 
-        if (response) {
-          this.items = response.e;
+        if (response.data) {
+          this.items = response.data.e;
           this.isLoading = false;
         } else {
           throw new UnexpectedEmptyResponse();

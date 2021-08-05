@@ -1,5 +1,6 @@
 /* eslint-disable prefer-arrow/prefer-arrow-functions */
 import { ConnectionError } from 'src/app/exceptions/connection-error';
+import { DeviceChooserAborted } from 'src/app/exceptions/device-chooser-abort';
 import { NotConnected } from 'src/app/exceptions/not-connected';
 import { UnexpectedState } from 'src/app/exceptions/unexpected-state';
 import {
@@ -16,7 +17,7 @@ import { BluetoothService } from '../bluetooth.service';
 import { LoggerService } from '../logger.service';
 
 export class BLEWebAdapter implements BLEAdapter {
-  connected = false;
+  connecting = false;
 
   // eslint-disable-next-line @typescript-eslint/ban-types
   listeners = {
@@ -29,6 +30,10 @@ export class BLEWebAdapter implements BLEAdapter {
   private device: null | BluetoothDevice = null;
 
   constructor(private readonly logger: LoggerService) {}
+
+  get connected() {
+    return Promise.resolve(this.device?.gatt?.connected || false);
+  }
 
   onConnected(connectedFn: () => any) {
     this.listeners.connect.push(connectedFn);
@@ -53,53 +58,58 @@ export class BLEWebAdapter implements BLEAdapter {
   async connect(targetService: string) {
     const connect = async () => {
       const r = await this.device?.gatt?.connect();
+      this.connecting = false;
       this.gattConnected();
       return r;
     };
-    return new Promise<void>(async (resolve, reject) => {
-      if (this.device) {
-        connect();
-        return;
+
+    if (this.device) {
+      return connect();
+    }
+
+    try {
+      const reqOpts = {
+        acceptAllDevices: true,
+        optionalServices: [targetService],
+        // filters: [
+        //   {
+        //     services: [],
+        //   },
+        // ],
+      };
+
+      this.connecting = true;
+      this.logger.log('Requesting connection to BimmerLED Device...');
+      this.device = await navigator.bluetooth.requestDevice(reqOpts);
+
+      this.device.addEventListener(
+        'gattserverdisconnected',
+        this.gattDisconnected.bind(this)
+      );
+
+      return exponentialBackoff(
+        3,
+        300,
+        async () => {
+          this.logger.log('Connecting to Bluetooth Device... ');
+          return connect();
+        },
+        () => {
+          throw new ConnectionError('Failed to reconnect.');
+        }
+      );
+    } catch (error) {
+      this.connecting = false;
+
+      // just web things..
+      if (error instanceof DOMException) {
+        if (error.message.match(/user\scancelled/i)) {
+          throw new DeviceChooserAborted();
+        }
       }
 
-      try {
-        this.logger.log('Requesting connection to BimmerLED Device...');
-        const reqOpts = {
-          acceptAllDevices: true,
-          optionalServices: [targetService],
-          // filters: [
-          //   {
-          //     services: [],
-          //   },
-          // ],
-        };
-        console.log({ reqOpts });
-        this.device = await navigator.bluetooth.requestDevice(reqOpts);
-
-        this.device.addEventListener(
-          'gattserverdisconnected',
-          this.gattDisconnected.bind(this)
-        );
-
-        exponentialBackoff(
-          3,
-          2,
-          async () => {
-            this.logger.log('Connecting to Bluetooth Device... ');
-            await connect();
-          },
-          async () => {
-            resolve(void 0);
-          },
-          () => {
-            throw new ConnectionError('Failed to reconnect.');
-          }
-        );
-      } catch (error) {
-        this.logger.error('Argh! ' + error);
-        reject(error);
-      }
-    });
+      throw error;
+    }
   }
 
   async disconnect() {
@@ -117,7 +127,7 @@ export class BLEWebAdapter implements BLEAdapter {
   async send<P = unknown, M extends Comm.Meta = any>(
     options: SendOptionsForAdapter<P, M>
   ): Promise<Comm.Envelope<P, M>> {
-    const { spec, to: char } = options;
+    const { spec, to: char, expectResponse } = options;
 
     if (!this.device?.gatt?.connected) {
       throw new NotConnected();
@@ -129,14 +139,18 @@ export class BLEWebAdapter implements BLEAdapter {
       spec.meta,
     ];
 
-    // NOTE: `writeValue` is deprecated
-    // @see https://webbluetoothcg.github.io/web-bluetooth/#dom-bluetoothremotegattcharacteristic-writevalue
-    await char?.writeValue(encode(payload));
+    const encodedPayload = encode(payload);
+
+    await char?.writeValue(encodedPayload, expectResponse);
 
     return payload;
   }
 
   async getService(serviceUUID: string): Promise<BLEServiceAdapter> {
+    if (!this.device?.gatt?.connected) {
+      throw new NotConnected();
+    }
+
     const service = await this.device?.gatt?.getPrimaryService(serviceUUID);
 
     if (!service) {
@@ -159,8 +173,12 @@ export class BLEWebAdapter implements BLEAdapter {
             return v.buffer;
           },
 
-          async writeValue(v: Uint8Array) {
-            return char.writeValue(v);
+          async writeValue(v: Uint8Array, willRespond: boolean) {
+            if (willRespond) {
+              return char.writeValueWithResponse(v);
+            }
+
+            return char.writeValueWithoutResponse(v);
           },
 
           async startNotifications() {
@@ -171,11 +189,16 @@ export class BLEWebAdapter implements BLEAdapter {
             await char.stopNotifications();
           },
 
-          onNotify(notifyFn: (event: Event) => any) {
-            return char.addEventListener(
-              'characteristicvaluechanged',
-              notifyFn
-            );
+          onNotify(notifyFn: (data: ArrayBuffer) => any) {
+            const listener = (event: any) => {
+              notifyFn(event.target?.value);
+            };
+
+            char.addEventListener('characteristicvaluechanged', listener);
+
+            return () => {
+              char.removeEventListener('characteristicvaluechanged', listener);
+            };
           },
         };
       },
@@ -183,12 +206,10 @@ export class BLEWebAdapter implements BLEAdapter {
   }
 
   private gattDisconnected() {
-    this.connected = false;
     runListeners(this.listeners.disconnect, Array.from(arguments));
   }
 
   private gattConnected() {
-    this.connected = true;
     runListeners(this.listeners.connect, Array.from(arguments));
   }
 }

@@ -1,3 +1,7 @@
 export class UnexpectedEmptyResponse extends Error {
-  message = 'Controller responded with no data where data was expected.';
+  constructor(
+    readonly message = 'Controller responded with no data where data was expected.'
+  ) {
+    super(message);
+  }
 }

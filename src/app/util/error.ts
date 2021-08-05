@@ -4,9 +4,9 @@ export const displayError = async <E extends Error>(error: E) => {
   const alert = document.createElement('ion-alert');
 
   const options: AlertOptions = {
-    header: 'Oh no! 😓',
-    subHeader: 'An error occoured',
-    message: error.message,
+    header: 'Error \u{1F615}',
+    subHeader: error.message,
+    // message: error.stack,
     cssClass: 'alert-kind-error',
     backdropDismiss: false,
     // eslint-disable-next-line @typescript-eslint/quotes

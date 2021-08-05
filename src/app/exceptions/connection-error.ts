@@ -1,3 +1,5 @@
 export class ConnectionError extends Error {
-  message = 'Unable to connect';
+  constructor(readonly message = 'Unable to connect.') {
+    super(message);
+  }
 }

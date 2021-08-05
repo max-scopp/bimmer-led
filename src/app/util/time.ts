@@ -8,20 +8,23 @@ export const exponentialBackoff = async (
   // eslint-disable-next-line @typescript-eslint/ban-types
   toTry: Function,
   // eslint-disable-next-line @typescript-eslint/ban-types
-  success: Function,
-  // eslint-disable-next-line @typescript-eslint/ban-types
   fail: Function
-) => {
-  try {
-    const result = await toTry();
-    success(result);
-  } catch (error) {
-    if (max === 0) {
-      return fail();
-    }
+) =>
+  new Promise(async (resolve, reject) => {
+    try {
+      resolve(await toTry());
+    } catch (error) {
+      if (max === 0) {
+        reject(fail(error));
+      }
 
-    setTimeout(() => {
-      exponentialBackoff(--max, delay * 2, toTry, success, fail);
-    }, delay * 1000);
-  }
-};
+      console.warn('exponentialBackoff(): Failed, retrying... ', {
+        delay,
+        error,
+      });
+      setTimeout(async () => {
+        const result = await exponentialBackoff(--max, delay * 2, toTry, fail);
+        resolve(result);
+      }, delay);
+    }
+  });

@@ -34,6 +34,24 @@ namespace Comm {
 
   export type Envelope<P, M = undefined> = [number, P, M | undefined] | [];
 
+  export class EnvelopeResponse<P, M extends Meta> extends Array {
+    took: number;
+    op: number | null;
+    data: P | null;
+    meta: M;
+
+    constructor(value: Envelope<any, any>, start: number) {
+      super();
+      this.took = Date.now() - start;
+
+      const [operation = null, data = null, meta = null] = value;
+
+      this.op = operation || null;
+      this.data = data || null;
+      this.meta = Meta.of(meta);
+    }
+  }
+
   export enum KnownOperation {
     ping = 0,
     getAbout = 1,
@@ -47,7 +65,8 @@ namespace Comm {
   }
 
   export interface PingResponse {
-    pong: number;
+    got: any;
+    millis: number;
   }
 
   export interface EffectsResponse {

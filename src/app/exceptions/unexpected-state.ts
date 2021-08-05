@@ -1,3 +1,7 @@
 export class UnexpectedState extends Error {
-  message = 'An internal service went into an unexpected state.';
+  constructor(
+    readonly message = 'An application service went into an unexpected state.'
+  ) {
+    super(message);
+  }
 }

@@ -1,3 +1,5 @@
 export class NotConnected extends Error {
-  message = 'Not connected to an device.';
+  constructor(readonly message = 'Not connected to a device.') {
+    super(message);
+  }
 }

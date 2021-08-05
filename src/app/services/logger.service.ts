@@ -56,7 +56,7 @@ export class LoggerService {
         break;
       case LogLevel.fatal:
         log = (logStr: string) =>
-          console.error('%c' + logStr, 'color: orangered');
+          console.error('%c[FATAL] ' + logStr, 'color: orangered');
         break;
     }
 

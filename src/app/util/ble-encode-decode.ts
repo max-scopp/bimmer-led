@@ -8,6 +8,7 @@ export const decode = (buff: BufferSource) => {
   try {
     return JSON.parse(strDecoded);
   } catch (e) {
+    console.warn('decode guessing json failed: ', e);
     return strDecoded;
   }
 };

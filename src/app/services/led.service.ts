@@ -61,24 +61,20 @@ export class LedService {
     prompt.present();
 
     try {
-      if (!this.bluetooth.connected) {
-        await this.bluetooth.tryReconnect();
-      }
-      const start = Date.now();
+      const validateValue = Math.trunc(Math.random() * 1e6);
+
       const response = await this.bluetooth.send<Comm.PingResponse>({
         expectResponse: true,
         spec: class Ping extends Number {
           static operation = Comm.KnownOperation.ping;
 
           valueOf() {
-            return Date.now();
+            return validateValue;
           }
         },
       });
 
-      const tookMs = Date.now() - start;
-      console.log({ response });
-      success = true;
+      success = response.data?.got === validateValue;
 
       prompt.header = 'Success';
       prompt.subHeader = 'Device pinged successfully';
@@ -86,12 +82,11 @@ export class LedService {
         '<p>' +
         [
           'The BimmerLED controller was able to successfully respond with an unique response.',
-          `The procedure took ${tookMs}ms`,
+          `The procedure took ${response.took}ms`,
         ].join('</p><p>') +
         '</p>';
       prompt.buttons = ['Nice!'];
-    } catch (e) {
-    } finally {
+
       if (!success) {
         prompt.header = 'Unable to ping';
         prompt.subHeader = undefined;
@@ -105,6 +100,9 @@ export class LedService {
           '</p>';
         prompt.buttons = ['Got it'];
       }
+    } catch (e) {
+      prompt.dismiss();
+      throw e;
     }
   }
 

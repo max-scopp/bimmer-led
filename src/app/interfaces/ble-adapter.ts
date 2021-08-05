@@ -10,10 +10,11 @@ export interface SendOptionsForAdapter<P, M extends Comm.Meta> {
 }
 
 export interface BLEAdapter {
-  readonly connected: boolean;
+  readonly connecting: boolean;
+  readonly connected: Promise<boolean>;
 
-  connect(targetService: string): Promise<void>;
-  pairNew(targetService: string): Promise<void>;
+  connect(targetService: string): Promise<any>;
+  pairNew(targetService: string): Promise<any>;
   disconnect(): Promise<void>;
 
   onConnected(connectedFn: () => any): RemoveListenerFunction;
@@ -38,10 +39,16 @@ export interface BLECharacteristicsAdapter {
   lastValue: ArrayBuffer | undefined;
 
   readValue(): Promise<ArrayBuffer>;
-  writeValue(v: Uint8Array): Promise<void>;
+
+  /**
+   * The `willRespond` flag is only needed for the protocol - it will not handle getting the response for you!
+   * @param v
+   * @param willRespond
+   */
+  writeValue(v: Uint8Array, willRespond: boolean): Promise<void>;
 
   startNotifications(): Promise<void>;
   stopNotifications(): Promise<void>;
 
-  onNotify(notifyFn: (event: Event) => any);
+  onNotify(notifyFn: (data: ArrayBuffer) => any): RemoveListenerFunction;
 }

@@ -27,7 +27,25 @@
 
 .alert-kind-error {
   .alert-wrapper {
-    border: 2px solid var(--ion-color-danger-shade);
+    &::before {
+      --strip-color-1: var(--ion-color-danger-shade);
+      --strip-color-2: var(--ion-color-warning-tint);
+
+      content: "";
+      height: 10px;
+
+      background-image: linear-gradient(
+        135deg,
+        var(--strip-color-1) 25%,
+        var(--strip-color-2) 25%,
+        var(--strip-color-2) 50%,
+        var(--strip-color-1) 50%,
+        var(--strip-color-1) 75%,
+        var(--strip-color-2) 75%,
+        var(--strip-color-2) 100%
+      );
+      background-size: 45.25px 45.25px;
+    }
   }
   .alert-message {
     --ion-text-color: var(--ion-color-danger);
