@@ -6,6 +6,7 @@ import {
   RSSI,
   ScanStatus,
 } from '@ionic-native/bluetooth-le/ngx';
+import { Platform } from '@ionic/angular';
 import { Observable, partition, Subscriber } from 'rxjs';
 import {
   buffer,
@@ -21,7 +22,7 @@ import { displayError } from 'src/app/util/error';
 
 interface ScannedDevice extends RSSI {
   invalidated: boolean;
-  isBonded: boolean;
+  isBonded: boolean | null;
   isConnected: boolean;
 }
 
@@ -49,6 +50,7 @@ export class BleDevicesComponent implements OnInit {
   constructor(
     private readonly logger: LoggerService,
     private readonly ble: BluetoothLE,
+    private readonly platform: Platform,
     private ngZone: NgZone
   ) {}
 
@@ -169,9 +171,15 @@ export class BleDevicesComponent implements OnInit {
       .subscribe(async (scan: ScanStatus) => {
         this.logger.log(`Found Bluetooth LE Device(s)`);
 
-        const { isBonded } = await this.ble.isBonded({
-          address: scan.address,
-        });
+        let isBonded: boolean | null = null;
+
+        if (this.platform.is('android')) {
+          const scannedBond = await this.ble.isBonded({
+            address: scan.address,
+          });
+
+          isBonded = scannedBond.isBonded;
+        }
 
         const { isConnected = false } = isBonded
           ? await this.ble.isConnected({
